@@ -2,9 +2,12 @@ package uisrv
 
 import (
 	"context"
+	"fmt"
+	"gopkg.in/yaml.v3"
 	"log"
 	"net/http"
 	"path"
+	"strings"
 	"text/template"
 	"time"
 
@@ -17,6 +20,15 @@ var htmlDir string
 var srv *http.Server
 
 var logger = log.New(log.Default().Writer(), "[UI] ", log.Default().Flags()|log.Lmsgprefix|log.Lmicroseconds)
+
+var (
+	funcs = template.FuncMap{
+		"getNameFromKey":          getNameFromKey,
+		"getNamespaceFromKey":     getNamespaceFromKey,
+		"getKeyFromNameNamespace": getKeyFromNameNamespace,
+		"getSpec":                 getSpec,
+	}
+)
 
 func Start(rootDir string) {
 	htmlDir = path.Join(rootDir, "uisrv/html")
@@ -37,7 +49,8 @@ func Shutdown() {
 }
 
 func renderTemplate(w http.ResponseWriter, htmlTemplateFile string, data interface{}) {
-	t, err := template.ParseFiles(
+
+	t, err := template.New("t").Funcs(funcs).ParseFiles(
 		path.Join(htmlDir, "header.html"),
 		path.Join(htmlDir, htmlTemplateFile),
 	)
@@ -57,6 +70,44 @@ func renderTemplate(w http.ResponseWriter, htmlTemplateFile string, data interfa
 	}
 }
 
+// hack to only get the spec
+func getSpec(conf protobufs.AgentConfigFile) string {
+	m := make(map[string]interface{})
+	err := yaml.Unmarshal([]byte(conf.GetBody()), &m)
+	if err != nil {
+		log.Fatalf("error: %v", err)
+	}
+	bytes, err := yaml.Marshal(m["spec"])
+	if err != nil {
+		return ""
+	}
+	return string(bytes)
+}
+
+func getNameAndNamespace(key string) (string, string) {
+	s := strings.Split(key, "/")
+	// We expect map keys to be of the form name/namespace
+	if len(s) != 2 {
+		return "", ""
+	}
+	return s[0], s[1]
+}
+
+func getKeyFromNameNamespace(name string, namespace string) string {
+	return fmt.Sprintf("%s/%s", name, namespace)
+}
+
+// Go templating doesn't allow for multiple returns
+func getNameFromKey(key string) string {
+	name, _ := getNameAndNamespace(key)
+	return name
+}
+
+func getNamespaceFromKey(key string) string {
+	_, namespace := getNameAndNamespace(key)
+	return namespace
+}
+
 func renderRoot(w http.ResponseWriter, r *http.Request) {
 	renderTemplate(w, "root.html", data.AllAgents.GetAllAgentsReadonlyClone())
 }
@@ -67,7 +118,13 @@ func renderAgent(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	renderTemplate(w, "agent.html", agent)
+
+	renderMap := map[string]interface{}{
+		"Agent":     agent,
+		"Name":      r.URL.Query().Get("name"),
+		"Namespace": r.URL.Query().Get("namespace"),
+	}
+	renderTemplate(w, "agent.html", renderMap)
 }
 
 func saveCustomConfigForInstance(w http.ResponseWriter, r *http.Request) {
@@ -82,11 +139,17 @@ func saveCustomConfigForInstance(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
+	name := r.Form.Get("name")
+	namespace := r.Form.Get("namespace")
+	if len(name) == 0 || len(namespace) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 
 	configStr := r.PostForm.Get("config")
 	config := &protobufs.AgentConfigMap{
 		ConfigMap: map[string]*protobufs.AgentConfigFile{
-			"": {Body: []byte(configStr)},
+			getKeyFromNameNamespace(name, namespace): {Body: []byte(configStr)},
 		},
 	}
 
@@ -102,5 +165,5 @@ func saveCustomConfigForInstance(w http.ResponseWriter, r *http.Request) {
 	case <-timer.C:
 	}
 
-	http.Redirect(w, r, "/agent?instanceid="+string(instanceId), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("/agent?instanceid=%s&name=%s&namespace=%s", string(instanceId), name, namespace), http.StatusSeeOther)
 }

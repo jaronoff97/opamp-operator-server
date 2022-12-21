@@ -21,20 +21,20 @@
             <h3>Agent</h3>
             <table border="1" style="border-collapse: collapse">
                 <tr>
-                    <td>Instance ID:</td><td>{{ .InstanceId }}</td>
+                    <td>Instance ID:</td><td>{{ .Agent.InstanceId }}</td>
                 </tr>
-                {{if .Status.Health }}
+                {{if .Agent.Status.Health }}
                 <tr>
-                    <td>Up:</td><td>{{ .Status.Health.Up }}</td>
+                    <td>Up:</td><td>{{ .Agent.Status.Health.Healthy }}</td>
                 </tr>
-                {{if .Status.Health.LastError }}
+                {{if .Agent.Status.Health.LastError }}
                 <tr>
-                    <td></td><td><span style="color:red">{{ .Status.Health.LastError }}</span></td>
+                    <td></td><td><span style="color:red">{{ .Agent.Status.Health.LastError }}</span></td>
                 </tr>
                 {{end}}
-                {{if .Status.Health.Up }}
+                {{if .Agent.Status.Health.Healthy }}
                 <tr>
-                    <td>Up since:</td><td>{{ .StartedAt }}</td>
+                    <td>Up since:</td><td>{{ .Agent.StartedAt }}</td>
                 </tr>
                 {{end}}
                 {{end}}
@@ -43,12 +43,12 @@
         <td valign="top">
             <h3>Attributes</h3>
             <table border="1" style="border-collapse: collapse">
-                {{ range .Status.AgentDescription.IdentifyingAttributes }}
+                {{ range .Agent.Status.AgentDescription.IdentifyingAttributes }}
                 </tr>
                 <td>{{ .Key }}</td><td>{{ .Value }}</td>
                 </tr>
                 {{ end }}
-                {{ range .Status.AgentDescription.NonIdentifyingAttributes }}
+                {{ range .Agent.Status.AgentDescription.NonIdentifyingAttributes }}
                 </tr>
                 <td>{{ .Key }}</td><td>{{ .Value }}</td>
                 </tr>
@@ -60,21 +60,45 @@
 
 <hr/>
 
+<h2>Collector Pools</h2>
+<table width="100%" border="1" style="border-collapse: collapse">
+    <tr>
+        <td>Name</td>
+        <td>Namespace</td>
+    </tr>
+
+    {{ range $key, $value := .Agent.EffectiveConfig }}
+    {{ $name := getNameFromKey $key }}
+    {{ $namespace := getNamespaceFromKey $key }}
+    <tr>
+        <td><a href="/agent?instanceid={{ $.Agent.InstanceId }}&name={{$name}}&namespace={{$namespace}}">{{ $name }}</a></td>
+        <td><a href="/agent?instanceid={{ $.Agent.InstanceId }}&name={{$name}}&namespace={{$namespace}}">{{ $namespace }}</a></td>
+    </tr>
+    {{ end }}
+</table>
+
+
 <h3>Configuration</h3>
 <table width="100%">
+    {{ $key := getKeyFromNameNamespace .Name .Namespace }}
     <tr>
         <td valign="top">
+            {{ if  (and (ge (len .Name) 0) (ge (len .Namespace) 0)) }}
             Current Effective Configuration:<br/>
-            <pre><code class="language-yaml">{{ .EffectiveConfig }}</code></pre>
+            {{ $currentConfig := (index $.Agent.EffectiveConfig $key) }}
+            <pre style="display: grid"><code class="language-yaml">{{ printf "%s" $currentConfig.Body }}</code></pre>
+            {{ end }}
         </td>
         <td valign="top">
             Additional Configuration:<br/>
             <form action="/save_config" method="post">
-            <input type="hidden" name="instanceid" value="{{ .InstanceId }}"/>
-            <textarea cols="40" rows="20" name="config">{{ .CustomInstanceConfig }}</textarea><br/>
-             {{if .Status.RemoteConfigStatus }}
-                {{if .Status.RemoteConfigStatus.ErrorMessage }}
-                <span style="color:red">Failed: {{ .Status.RemoteConfigStatus.ErrorMessage }}</span><br/>
+            <input type="hidden" name="instanceid" value="{{ .Agent.InstanceId }}"/>
+                <h3>Name: <input name="name" value="{{ .Name }}"/></h3>
+                <h3>Namespace: <input name="namespace" value="{{ .Namespace }}"/></h3>
+            <textarea cols="40" rows="20" name="config">{{ printf "%s" (getSpec (index $.Agent.EffectiveConfig $key)) }}</textarea><br/>
+             {{if .Agent.Status.RemoteConfigStatus }}
+                {{if .Agent.Status.RemoteConfigStatus.ErrorMessage }}
+                <span style="color:red">Failed: {{ .Agent.Status.RemoteConfigStatus.ErrorMessage }}</span><br/>
                 {{end}}
              {{end}}
             <input type="submit" value="Save and Send to Agent"/>
