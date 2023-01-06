@@ -75,7 +75,8 @@ func getSpec(conf protobufs.AgentConfigFile) string {
 	m := make(map[string]interface{})
 	err := yaml.Unmarshal([]byte(conf.GetBody()), &m)
 	if err != nil {
-		log.Fatalf("error: %v", err)
+		log.Println("error: %v", err)
+		return ""
 	}
 	bytes, err := yaml.Marshal(m["spec"])
 	if err != nil {
@@ -94,6 +95,9 @@ func getNameAndNamespace(key string) (string, string) {
 }
 
 func getKeyFromNameNamespace(name string, namespace string) string {
+	if len(name) == 0 || len(namespace) == 0 {
+		return ""
+	}
 	return fmt.Sprintf("%s/%s", name, namespace)
 }
 

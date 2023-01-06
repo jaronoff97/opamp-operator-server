@@ -75,6 +75,9 @@
         <td><a href="/agent?instanceid={{ $.Agent.InstanceId }}&name={{$name}}&namespace={{$namespace}}">{{ $namespace }}</a></td>
     </tr>
     {{ end }}
+    <tr>
+        <td><a href="/agent?instanceid={{ $.Agent.InstanceId }}">New collector</a></td>
+    </tr>
 </table>
 
 
@@ -82,20 +85,24 @@
 <table width="100%">
     {{ $key := getKeyFromNameNamespace .Name .Namespace }}
     <tr>
+        {{ if (and (ge (len .Name) 1) (ge (len .Namespace) 1)) }}
         <td valign="top">
-            {{ if  (and (ge (len .Name) 0) (ge (len .Namespace) 0)) }}
             Current Effective Configuration:<br/>
             {{ $currentConfig := (index $.Agent.EffectiveConfig $key) }}
             <pre style="display: grid"><code class="language-yaml">{{ printf "%s" $currentConfig.Body }}</code></pre>
-            {{ end }}
         </td>
+        {{ end }}
         <td valign="top">
             Additional Configuration:<br/>
             <form action="/save_config" method="post">
             <input type="hidden" name="instanceid" value="{{ .Agent.InstanceId }}"/>
                 <h3>Name: <input name="name" value="{{ .Name }}"/></h3>
                 <h3>Namespace: <input name="namespace" value="{{ .Namespace }}"/></h3>
+                {{if (ge (len $key) 1)}}
             <textarea cols="40" rows="20" name="config">{{ printf "%s" (getSpec (index $.Agent.EffectiveConfig $key)) }}</textarea><br/>
+                {{else}}
+                <textarea cols="40" rows="20" name="config"></textarea><br/>
+                {{end}}
              {{if .Agent.Status.RemoteConfigStatus }}
                 {{if .Agent.Status.RemoteConfigStatus.ErrorMessage }}
                 <span style="color:red">Failed: {{ .Agent.Status.RemoteConfigStatus.ErrorMessage }}</span><br/>
