@@ -188,6 +188,10 @@ func (agent *Agent) updateEffectiveConfig(
 		if newStatus.EffectiveConfig.ConfigMap.GetConfigMap() != nil {
 			agent.Status.EffectiveConfig = newStatus.EffectiveConfig
 			agent.EffectiveConfig = newStatus.EffectiveConfig.ConfigMap.GetConfigMap()
+			//for key, file := range agent.EffectiveConfig {
+			//	agent.CustomInstanceConfig[key] = file.String()
+			//}
+			agent.calcRemoteConfig()
 		}
 	}
 }
@@ -278,6 +282,21 @@ func updateSpecFromConfig(old *protobufs.AgentConfigFile, newSpec []byte) (*prot
 	return old, nil
 }
 
+func (agent *Agent) DeleteCollector(key string) {
+	agent.mux.Lock()
+	defer agent.mux.Unlock()
+	delete(agent.CustomInstanceConfig, key)
+	delete(agent.EffectiveConfig, key)
+	configChanged := agent.calcRemoteConfig()
+	if !configChanged {
+		return
+	}
+	msg := &protobufs.ServerToAgent{
+		RemoteConfig: agent.remoteConfig,
+	}
+	agent.SendToAgent(msg)
+}
+
 // SetCustomConfig sets a custom config for this Agent.
 // notifyWhenConfigIsApplied channel is notified after the remote config is applied
 // to the Agent and after the Agent reports back the effective config.
@@ -314,12 +333,8 @@ func (agent *Agent) SetCustomConfig(
 		msg := &protobufs.ServerToAgent{
 			RemoteConfig: agent.remoteConfig,
 		}
-		agent.mux.Unlock()
-
 		agent.SendToAgent(msg)
 	} else {
-		agent.mux.Unlock()
-
 		if notifyWhenConfigIsApplied != nil {
 			// No config change. We are not going to send config to the Agent and
 			// as a result we do not expect status update from the Agent, so we will
@@ -327,6 +342,7 @@ func (agent *Agent) SetCustomConfig(
 			notifyWhenConfigIsApplied <- struct{}{}
 		}
 	}
+	agent.mux.Unlock()
 }
 
 // calcRemoteConfig calculates the remote config for this Agent. It returns true if
@@ -414,22 +430,8 @@ func (agent *Agent) calcConnectionSettings(response *protobufs.ServerToAgent) {
 	// Agent description, so we jst set them directly.
 
 	response.ConnectionSettings = &protobufs.ConnectionSettingsOffers{
-		Hash:  nil, // TODO: calc has from settings.
-		Opamp: nil,
-		OwnMetrics: &protobufs.TelemetryConnectionSettings{
-			// We just hard-code this to a port on a localhost on which we can
-			// run an Otel Collector for demo purposes. With real production
-			// servers this should likely point to an OTLP backend.
-			DestinationEndpoint: "https://ingest.staging.lightstep.com/metrics/otlp/v0.9",
-			Headers: &protobufs.Headers{
-				Headers: []*protobufs.Header{
-					{
-						Key:   "lightstep-access-token",
-						Value: "XXX",
-					},
-				},
-			},
-		},
+		Hash:             nil, // TODO: calc has from settings.
+		Opamp:            nil,
 		OwnTraces:        nil,
 		OwnLogs:          nil,
 		OtherConnections: nil,

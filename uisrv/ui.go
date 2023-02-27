@@ -36,6 +36,7 @@ func Start(rootDir string) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", renderRoot)
 	mux.HandleFunc("/agent", renderAgent)
+	mux.HandleFunc("/agent/delete", deleteAgent)
 	mux.HandleFunc("/save_config", saveCustomConfigForInstance)
 	srv = &http.Server{
 		Addr:    "0.0.0.0:4321",
@@ -129,6 +130,19 @@ func renderAgent(w http.ResponseWriter, r *http.Request) {
 		"Namespace": r.URL.Query().Get("namespace"),
 	}
 	renderTemplate(w, "agent.html", renderMap)
+}
+
+func deleteAgent(w http.ResponseWriter, r *http.Request) {
+	instanceId := data.InstanceId(r.URL.Query().Get("instanceid"))
+	agent := data.AllAgents.GetAgentReadonlyClone(instanceId)
+	if agent == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	key := getKeyFromNameNamespace(r.URL.Query().Get("name"), r.URL.Query().Get("namespace"))
+	agent.DeleteCollector(key)
+	http.Redirect(w, r, fmt.Sprintf("/agent?instanceid=%s", string(instanceId)), http.StatusSeeOther)
 }
 
 func saveCustomConfigForInstance(w http.ResponseWriter, r *http.Request) {

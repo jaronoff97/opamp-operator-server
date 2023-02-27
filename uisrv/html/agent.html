@@ -65,6 +65,7 @@
     <tr>
         <td>Name</td>
         <td>Namespace</td>
+<!--        <td></td>-->
     </tr>
 
     {{ range $key, $value := .Agent.EffectiveConfig }}
@@ -73,6 +74,7 @@
     <tr>
         <td><a href="/agent?instanceid={{ $.Agent.InstanceId }}&name={{$name}}&namespace={{$namespace}}">{{ $name }}</a></td>
         <td><a href="/agent?instanceid={{ $.Agent.InstanceId }}&name={{$name}}&namespace={{$namespace}}">{{ $namespace }}</a></td>
+<!--        <td><a href="/agent/delete?instanceid={{ $.Agent.InstanceId }}&name={{$name}}&namespace={{$namespace}}">delete</a></td>-->
     </tr>
     {{ end }}
     <tr>
